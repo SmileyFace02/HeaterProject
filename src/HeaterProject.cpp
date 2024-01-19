@@ -43,17 +43,18 @@ MenuItem mainMenuItems[] = {
 Menu mainMenu = {
   "Main Menu",
   mainMenuItems,
-  1
+  1         // Menu item count
 };
 
 Menu *activeMenu = &mainMenu;
 MenuItem *activeMenuItem = &activeMenu->items[0];
 
-
-
 #if defined(HAS_SCREEN) && defined(SCREEN_ADDRESS)
 LiquidCrystal_I2C lcd(SCREEN_ADDRESS, 16, 2);
 #endif
+
+
+// -------------------- SETUP AND LOOP --------------------
 
 void setup() {
   #ifdef MOSFET_PIN
@@ -120,9 +121,11 @@ void updateScreen() {
   lcd.print(activeMenuItem->name);
   lcd.print(":  ");
   float** vals = activeMenuItem->fvaluesPtr;
-  lcd.print(String((int)*(vals[0])).substring(0, 2));
+  //lcd.print(String((int)*(vals[0])).substring(0, 2));
+  lcd.print((int)*(vals[0]));
   lcd.print("/");
-  lcd.print(String((int)*(vals[1])).substring(0, 2));
+  //lcd.print(String((int)*(vals[1])).substring(0, 2));
+  lcd.print((int)*(vals[1]));
 
   Serial.print(">TEMP ");
   Serial.print("[");
