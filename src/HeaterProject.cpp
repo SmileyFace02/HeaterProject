@@ -122,9 +122,12 @@ void updateScreen() {
   lcd.print(":  ");
   lcd.setCursor(0, 1);
   float** vals = activeMenuItem->fvaluesPtr;
-  lcd.print((int)*(vals[0]));
+  lcd.print(currentTemperature);
   lcd.print("/");
-  lcd.print((int)*(vals[1]));
+  lcd.print(setTemperature);
+  lcd.print("/");
+  lcd.print(encoderSteps);
+
 
   Serial.print(">TEMP ");
   Serial.print("[");
