@@ -49,53 +49,55 @@ Menu mainMenu = {
 Menu *activeMenu = &mainMenu;
 MenuItem *activeMenuItem = &activeMenu->items[0];
 
-#if defined(HAS_SCREEN) && defined(SCREEN_ADDRESS)
-LiquidCrystal_I2C lcd(SCREEN_ADDRESS, 16, 2);
+#if !defined(HAS_SCREEN) || !defined(SCREEN_ADDRESS)
+  #error "Screen not defined"
 #endif
+LiquidCrystal_I2C lcd(SCREEN_ADDRESS, 16, 2);
 
 
 // -------------------- SETUP AND LOOP --------------------
 
 void setup() {
-  #ifdef MOSFET_PIN
-    pinMode(MOSFET_PIN, OUTPUT);
-  #else
+  #ifndef MOSFET_PIN
     #error "MOSFET_PIN not defined"
   #endif
+    pinMode(MOSFET_PIN, OUTPUT);
 
-  #ifdef NTC_PIN
-    pinMode(NTC_PIN, INPUT);
-  #else
+  #ifndef NTC_PIN
     #error "NTC_PIN not defined"
   #endif
+    pinMode(NTC_PIN, INPUT);
 
   #ifdef HAS_SCREEN
     lcd.init();
     lcd.backlight();
   #endif
-  // Initialize serial communication
-  Serial.begin(9600);
 
-  attachInterrupt(digitalPinToInterrupt(ENCODER_BUTTON_PIN), editModeToggle, CHANGE);
-  attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_A), handleEncoder, CHANGE);
+  pinMode(ENCODER_BUTTON_PIN, INPUT_PULLUP);
+  pinMode(ENCODER_PIN_A, INPUT_PULLUP);
+  pinMode(ENCODER_PIN_B, INPUT_PULLUP);
+  pinMode(MOSFET_PIN, OUTPUT);
+
+  Serial.begin(9600);
 }
 
 long millis_last = millis();
 void loop() {
-  if (millis() - millis_last > 1000) {
+  if (millis() - millis_last > 25) {
     millis_last = millis();
-    updateScreen();
     updateValues();
+    updateScreen();
   }
   tempControl();
+  handleEncoder();
 }
 
 
 // -------------------- FUNCTION DEFINITIONS --------------------
 
 float tempFromResistance(int resistance) {
-  float T = 1.0 / ((1.0 / REFERENCE_TEMP_KELVIN) + (1.0 / NTC_BETA) * log(resistance / REFERENCE_RESISTANCE));
-  return T - 273.15;
+  float T = 1.0 / ((1.0 / (float)REFERENCE_TEMP_KELVIN) + (1.0 / (float)NTC_BETA) * log((float)resistance / (float)REFERENCE_RESISTANCE));
+  return (T - 273.15);
 }
 
 void setOutput(float percentage) {
@@ -116,15 +118,12 @@ void setOutput(float percentage) {
 void updateScreen() {
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print(activeMenu->title);
-  lcd.setCursor(0, 1);
   lcd.print(activeMenuItem->name);
   lcd.print(":  ");
+  lcd.setCursor(0, 1);
   float** vals = activeMenuItem->fvaluesPtr;
-  //lcd.print(String((int)*(vals[0])).substring(0, 2));
   lcd.print((int)*(vals[0]));
   lcd.print("/");
-  //lcd.print(String((int)*(vals[1])).substring(0, 2));
   lcd.print((int)*(vals[1]));
 
   Serial.print(">TEMP ");
@@ -133,14 +132,10 @@ void updateScreen() {
   Serial.print("] / [");
   Serial.print(setTemperature);
   Serial.println("]");
-
-  // Other code to update the display goes here
 }
 
 void updateValues() {
-  if (editModeToggleState) {
-    setTemperature += encoderSteps;
-  }
+  setTemperature += encoderSteps;
   encoderSteps = 0;
   currentTemperature = tempFromResistance(analogRead(NTC_PIN));
   setOutput(setTemperature);
@@ -157,8 +152,6 @@ void handleEncoder() {
     }
   }
   lastEncoderState = a;
-  updateValues();
-  updateScreen();
 }
 
 void editModeToggle() {
