@@ -2,7 +2,7 @@
 #define PINS_H
 
 // -------------- Edit these values to match your setup --------------
-#define MOSFET_PIN 2                //PWM pin
+#define MOSFET_PIN 1                //PWM pin
 #define MOSFET_HIGH_OFF             //Reverse mosfet logic - comment to disable
 
 #define NTC_PIN A0                  //Analog pin
@@ -20,9 +20,9 @@
 //#define SCREEN_RESET_PIN 6
 
 #define HAS_ENCODER
-#define ENCODER_PIN_A 13            //Override default pins
-#define ENCODER_PIN_B 12            //Override default pins
-#define ENCODER_BUTTON_PIN 11       //Override default pins
+#define ENCODER_PIN_A 2            //Override default pins
+#define ENCODER_PIN_B 4            //Override default pins
+#define ENCODER_BUTTON_PIN 3       //Override default pins
 
 // -------------- System defines, do not change --------------
 #define REFERENCE_TEMP_KELVIN 273.15 + REFERENCE_TEMP_CELSIUS

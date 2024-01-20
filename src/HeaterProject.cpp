@@ -7,7 +7,7 @@
 float tempFromResistance(int);
 void setOutput(float);
 void updateScreen();
-void handleEncoder();
+void handleEncoderInterrupt();
 void editModeToggle();
 void updateValues();
 void tempControl();
@@ -31,9 +31,11 @@ struct Menu {
 float currentTemperature = 0;
 float setTemperature = 0;
 
-int lastEncoderState = 0;
-int encoderSteps = 0;
-int editModeToggleState = 0;
+volatile int lastEncoderState = 0;
+volatile int encoderSteps = 0;
+volatile int editModeToggleState = 0;
+
+long millis_last = 0;
 
 // -------------------- CONSTANTS --------------------
 float* temps[] = {&currentTemperature, &setTemperature};
@@ -78,18 +80,17 @@ void setup() {
   pinMode(ENCODER_PIN_B, INPUT_PULLUP);
   pinMode(MOSFET_PIN, OUTPUT);
 
+  attachInterrupt(digitalPinToInterrupt(ENCODER_PIN_A), handleEncoderInterrupt, CHANGE); 
   Serial.begin(9600);
 }
 
-long millis_last = millis();
 void loop() {
-  if (millis() - millis_last > 25) {
+  if (millis() - millis_last > 100) {
     millis_last = millis();
     updateValues();
     updateScreen();
   }
   tempControl();
-  handleEncoder();
 }
 
 
@@ -97,6 +98,7 @@ void loop() {
 
 float tempFromResistance(int resistance) {
   float T = 1.0 / ((1.0 / (float)REFERENCE_TEMP_KELVIN) + (1.0 / (float)NTC_BETA) * log((float)resistance / (float)REFERENCE_RESISTANCE));
+  
   return (T - 273.15);
 }
 
@@ -144,7 +146,7 @@ void updateValues() {
   setOutput(setTemperature);
 }
 
-void handleEncoder() {
+/*void handleEncoder() {
   int a = digitalRead(ENCODER_PIN_A);
   int b = digitalRead(ENCODER_PIN_B);
   if (a != lastEncoderState) {
@@ -155,6 +157,18 @@ void handleEncoder() {
     }
   }
   lastEncoderState = a;
+}*/
+
+void handleEncoderInterrupt() {
+  int encoderState = digitalRead(ENCODER_PIN_A);
+  if (encoderState != lastEncoderState) {
+    if (digitalRead(ENCODER_PIN_B) != encoderState) {
+      encoderSteps++;
+    } else {
+      encoderSteps--;
+    }
+  }
+  lastEncoderState = encoderState;
 }
 
 void editModeToggle() {
