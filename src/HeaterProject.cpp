@@ -96,9 +96,9 @@ void loop() {
 
 // -------------------- FUNCTION DEFINITIONS --------------------
 
-float tempFromResistance(int resistance) {
-  float T = 1.0 / ((1.0 / (float)REFERENCE_TEMP_KELVIN) + (1.0 / (float)NTC_BETA) * log((float)resistance / (float)REFERENCE_RESISTANCE));
-  
+float tempFromResistance(int val) {
+  float resistance = (float)val * NTC_RESISTOR / (1023 - val);
+  float T = 1.0 / ((1.0 / REFERENCE_TEMP_KELVIN) + (1.0 / NTC_BETA) * log(resistance / REFERENCE_RESISTANCE));
   return (T - 273.15);
 }
 
@@ -145,19 +145,6 @@ void updateValues() {
   currentTemperature = tempFromResistance(analogRead(NTC_PIN));
   setOutput(setTemperature);
 }
-
-/*void handleEncoder() {
-  int a = digitalRead(ENCODER_PIN_A);
-  int b = digitalRead(ENCODER_PIN_B);
-  if (a != lastEncoderState) {
-    if (b != a) {
-      encoderSteps++;
-    } else {
-      encoderSteps--;
-    }
-  }
-  lastEncoderState = a;
-}*/
 
 void handleEncoderInterrupt() {
   int encoderState = digitalRead(ENCODER_PIN_A);
