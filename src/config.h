@@ -10,6 +10,7 @@
 #define MOTOR_STEP_PIN 9
 #define MOTOR_DIR_PIN 10
 #define MOTOR_ACCELERATION 250
+#define INVERT_MOTOR_DIRECTION 0
 
 #define BUTTON_0_PIN 2
 #define BUTTON_1_PIN 3
@@ -21,6 +22,7 @@
 
 #define HAS_SCREEN                  //Only a 16x2 i2c display is supported currently
 #define SCREEN_ADDRESS 0x27         //I2C address
+#define SCREEN_HEIGHT 2
 #define SCREEN_REFRESH_MILLISECONDS 100
 
 #define ENCODER_PIN_A 5

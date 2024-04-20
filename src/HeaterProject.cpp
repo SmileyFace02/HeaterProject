@@ -10,21 +10,21 @@ void setHeatPower(float);
 void updateScreen();
 void editModeToggle();
 void inputHandler();
-void millisOverflowHandler(long*);
+void millisOverflowHandler(unsigned long*);
 void update();
-bool softDelay(long*);
+bool softDelay(unsigned long*, unsigned int);
 
 // -------------------- MENU --------------------
 struct MenuItem {
   const char* name;
   volatile float** fvaluesPtr;
-  int fvaluesCount;
+  const int fvaluesCount;
   void (*onClickAction)();
 };
 struct Menu {
   const char* title;
   MenuItem* items;
-  int itemCount;
+  const int itemCount;
 };
 
 
@@ -44,6 +44,7 @@ volatile bool fanOn = false;
 volatile int lastEncoderState = 0;
 volatile int encoderSteps = 0;
 
+volatile int lastButtonEState = 0;
 volatile int lastButton0State = 0;
 volatile int lastButton1State = 0;
 volatile int lastButton2State = 0;
@@ -55,7 +56,7 @@ volatile float* temps[] = {&currentTemperature, &setTemperature};
 volatile float* speed[] = {&currentSpeed, &setSpeed};
 MenuItem mainMenuItems[] = {
   {"Temp", temps, 2, editModeToggle},
-  {"Speed", speed, 1, editModeToggle}
+  {"Speed", speed, 2, editModeToggle}
 };
 Menu mainMenu = {
   "Main Menu",
@@ -117,17 +118,18 @@ void setup() {
   Serial.begin(9600);
 }
 
-long millis_lastScreenRefresh = 0;
-long millis_lastUpdate = 0;
-long millis_lastMotorStep = 0;
+unsigned long millis_lastScreenRefresh = 0;
+unsigned long millis_lastUpdate = 0;
+unsigned long millis_lastMotorStep = 0;
 void loop() {
   if (softDelay(&millis_lastScreenRefresh, SCREEN_REFRESH_MILLISECONDS)) updateScreen();
 
   if (softDelay(&millis_lastUpdate, (int)(1000.0/UPDATE_FREQ))) update();
 
-  if (motorOn && softDelay(&millis_lastMotorStep, (int)(1000.0/currentSpeed))){
+  if (motorOn && softDelay(&millis_lastMotorStep, (int)(1000.0/abs(currentSpeed)))){
     step = !step;
-    digitalWrite(MOTOR_DIR_PIN, dir);
+    if (currentSpeed >= 0) digitalWrite(MOTOR_DIR_PIN, !INVERT_MOTOR_DIRECTION);
+    else digitalWrite(MOTOR_DIR_PIN, INVERT_MOTOR_DIRECTION);
     digitalWrite(MOTOR_STEP_PIN, step);
   }
 
@@ -145,8 +147,8 @@ float tempFromAnalog (int val) {
   return (T - 273.15);
 }
 
-long millis_lastHeaterOn = 0;
-long millis_lastHeaterOff = 0;
+unsigned long millis_lastHeaterOn = 0;
+unsigned long millis_lastHeaterOff = 0;
 void setHeatPower(float percentage) {
   if (percentage < 0) percentage = 0;
   if (percentage > 100) percentage = 100;
@@ -177,37 +179,31 @@ void setHeatPower(float percentage) {
 
 void updateScreen() {
   lcd.clear();
+  lcd.setCursor(0, 0);
   if (editModeToggleState) lcd.print(">");
   else lcd.print("-");
-  for (int i = 0; (i < activeMenu->itemCount) || (i < 2); i++){
+
+  for (int i = 0; i < SCREEN_HEIGHT; i++){
+    MenuItem* activeItem = &activeMenu->items[(activeMenuCursor+i)%(activeMenu->itemCount)];
+
     lcd.setCursor(1, i);
     Serial.println();
-    lcd.print(activeMenu->items[activeMenuCursor+i].name);
-    Serial.print(activeMenu->items[activeMenuCursor+i].name);
-    lcd.print(": ");
+
+    lcd.print(activeItem->name);
+    Serial.print(activeItem->name);
+
+    lcd.print(" ");
     Serial.print(": ");
-    for (int j = 0; j < activeMenu->items[activeMenuCursor+i].fvaluesCount; j++){
-      float current_value = *activeMenu->items[activeMenuCursor+i].fvaluesPtr[j];
+    for (int j = 0; j < activeItem->fvaluesCount; j++){
+      float current_value = *activeItem->fvaluesPtr[j];
       if (j>0) {
-        lcd.print(" / ");
+        lcd.print("/");
         Serial.print (" / ");
       }
-      lcd.print(current_value);
+      lcd.print((int)current_value);
       Serial.print(current_value);
     }
   }
-}
-
-void handleEncoder() {
-  int encoderState = digitalRead(ENCODER_PIN_A);
-  if (encoderState != lastEncoderState) {
-    if (digitalRead(ENCODER_PIN_B) != encoderState) {
-      encoderSteps++;
-    } else {
-      encoderSteps--;
-    }
-  }
-  lastEncoderState = encoderState;
 }
 
 void editModeToggle(){
@@ -224,10 +220,48 @@ void inputHandler(){
     }
   }
   lastEncoderState = encoderState;
+
+  int buttonEState = digitalRead(ENCODER_BUTTON_PIN);
+  if (buttonEState){
+    if(!lastButtonEState){
+      activeMenu->items[activeMenuCursor].onClickAction();
+      lastButtonEState = buttonEState;
+    }
+  }
+  else lastButtonEState = buttonEState;
+
+  int button0State = digitalRead(TOGGLE_HEAT_BUTTON);
+  if (button0State){
+    if(!lastButton0State){
+      heaterOn = !heaterOn;
+      lastButton0State = button0State;
+    }
+  }
+  else lastButton0State = button0State;
+
+  int button1State = digitalRead(TOGGLE_MOTOR_BUTTON);
+  if (button1State){
+    if(!lastButton1State){
+      motorOn = !motorOn;
+      lastButton1State = button1State;
+    }
+  }
+  else lastButton1State = button1State;
+
+  int button2State = digitalRead(TOGGLE_FAN_BUTTON);
+  if (button2State){
+    if(!lastButton2State){
+      fanOn = !fanOn;
+      lastButton2State = button2State;
+    }
+  }
+  else lastButton2State = button2State;
+
+  return;
 }
 
-void millisOverflowHandler(long* millis_ptr){
-  if(millis() < *millis_ptr) *millis_ptr = *millis_ptr - maxof(long);
+void millisOverflowHandler(unsigned long* millis_ptr){
+  if(millis() < *millis_ptr) *millis_ptr = 0; //*millis_ptr - maxof(unsigned long);
   return;
 }
 
@@ -244,14 +278,16 @@ void update(){
   else currentSpeed = setSpeed;
 
   int lastValIndex = activeMenu->items[activeMenuCursor].fvaluesCount - 1;
-  if(editModeToggleState) activeMenu->items[activeMenuCursor].fvaluesPtr[lastValIndex] += encoderSteps;
-  else activeMenuCursor += encoderSteps;
+  if(editModeToggleState) activeMenu->items[activeMenuCursor].fvaluesPtr[lastValIndex] = activeMenu->items[activeMenuCursor].fvaluesPtr[lastValIndex] + encoderSteps;
+  else activeMenuCursor = (activeMenuCursor+encoderSteps)%activeMenu->itemCount;
   encoderSteps = 0;
+
+  digitalWrite(FAN_PIN, fanOn);
 
   return;
 }
 
-bool softDelay(long* lastMillis_ptr, int delay_milliseconds){
+bool softDelay(unsigned long* lastMillis_ptr, unsigned int delay_milliseconds){
   millisOverflowHandler(lastMillis_ptr);
   if (millis() - *lastMillis_ptr >= delay_milliseconds){
     *lastMillis_ptr = millis();
