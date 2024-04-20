@@ -2,10 +2,10 @@
 #define PINS_H
 
 // -------------- Edit these values to match your setup --------------
-#define HEATER_PIN 13
+#define HEATER_PIN 12
 #define HEATER_SWITCH_FREQ 1 //if HEATER_PIN is not PWM capable -> 'software PWM'
 
-#define FAN_PIN 12
+#define FAN_PIN 13
 
 #define MOTOR_STEP_PIN 9
 #define MOTOR_DIR_PIN 10
