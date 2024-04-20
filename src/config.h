@@ -25,6 +25,6 @@
 #define ENCODER_BUTTON_PIN 3       //Override default pins !INTERRUPT CAPABLE ONLY!
 
 // -------------- System defines, do not change --------------
-#define REFERENCE_TEMP_KELVIN 273.15 + REFERENCE_TEMP_CELSIUS
+#define REFERENCE_TEMP_KELVIN (273.15 + REFERENCE_TEMP_CELSIUS)
 
 #endif

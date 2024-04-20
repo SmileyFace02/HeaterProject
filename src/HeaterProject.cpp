@@ -95,10 +95,17 @@ void loop() {
 
 
 // -------------------- FUNCTION DEFINITIONS --------------------
-
+float sensor_resistance = 0;
+float T = 0;
+float a = 0;
+float b = 0;
+float c = 0;
 float tempFromResistance(int val) {
-  float resistance = (float)val * NTC_RESISTOR / (1023 - val);
-  float T = 1.0 / ((1.0 / REFERENCE_TEMP_KELVIN) + (1.0 / NTC_BETA) * log(resistance / REFERENCE_RESISTANCE));
+  sensor_resistance = (1023.0*(float)NTC_RESISTOR)/((float)val) - (float)NTC_RESISTOR;
+  a = log(sensor_resistance/(float)REFERENCE_RESISTANCE);
+  b = a / (float)NTC_BETA;
+  c = b + (1.0/(float)REFERENCE_TEMP_KELVIN);
+  T = 1.0/c;
   return (T - 273.15);
 }
 
@@ -120,15 +127,18 @@ void setOutput(float percentage) {
 void updateScreen() {
   lcd.clear();
   lcd.setCursor(0, 0);
-  lcd.print(activeMenuItem->name);
+  //lcd.print(activeMenuItem->name);
+  lcd.print(sensor_resistance);
+  lcd.print("/");
+  lcd.print(T);
   lcd.print(":  ");
   lcd.setCursor(0, 1);
   //float** vals = activeMenuItem->fvaluesPtr;
-  lcd.print(currentTemperature);
+  lcd.print(a);
   lcd.print("/");
-  lcd.print(setTemperature);
+  lcd.print(b);
   lcd.print("/");
-  lcd.print(encoderSteps);
+  lcd.print(c);
 
 
   Serial.print(">TEMP ");
