@@ -37,6 +37,7 @@
 #define UPDATE_FREQ 10              //(Hz) check and recalculate everything at this frequency
 #define TEMP_ERROR_MAX 10           //(C) sets at which point the power starts going down when nearing the target 
 
+
 // -------------- System defines, do not change --------------
 #define REFERENCE_TEMP_CELSIUS 25.0         //25 degrees celsius
 #define REFERENCE_RESISTANCE 100000.0       //100k NTC
