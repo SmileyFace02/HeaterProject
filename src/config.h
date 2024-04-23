@@ -22,6 +22,7 @@
 
 #define HAS_SCREEN                  //Only a 16x2 i2c display is supported currently
 #define SCREEN_ADDRESS 0x27         //I2C address
+#define SCREEN_WIDTH  16
 #define SCREEN_HEIGHT 2
 #define SCREEN_REFRESH_MILLISECONDS 100
 

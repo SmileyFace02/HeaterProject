@@ -5,111 +5,89 @@
 #include <macros.h>
 
 // -------------------- FUNCTION DECLARATIONS --------------------
+void update();
+void updateScreen();
+void inputHandler();
+void editmodeToggle();
 float tempFromAnalog(int);
 void setHeatPower(float);
-void updateScreen();
-void editModeToggle();
-void inputHandler();
-void millisOverflowHandler(unsigned long*);
-void update();
-bool softDelay(unsigned long*, unsigned int);
 
-// -------------------- MENU --------------------
-struct MenuItem {
-  const char* name;
-  volatile float** fvaluesPtr;
-  const int fvaluesCount;
-  void (*onClickAction)();
-};
-struct Menu {
-  const char* title;
-  MenuItem* items;
-  const int itemCount;
-};
+void millisOverflowHandler(unsigned long*);
+bool softDelay(unsigned long*, unsigned int);
 
 
 // -------------------- GLOBAL VARIABLES --------------------
-volatile float currentTemperature = 0;
-volatile float setTemperature = 0;
+volatile float temperature[] = {0.0, 0.0};  //current, set
+volatile float speed[] = {0.0, 0.0};        //current, set
 
-volatile float currentSpeed = 0;
-volatile float setSpeed = 0;
-bool step = false;
-bool dir = true;
+volatile int step = false;
+volatile int dir = true;
 
-volatile bool heaterOn = false;
-volatile bool motorOn = false;
-volatile bool fanOn = false;
+volatile int heaterOn = false;
+volatile int motorOn = false;
+volatile int fanOn = false;
 
 volatile int lastEncoderState = 0;
 volatile int encoderSteps = 0;
 
-volatile int lastButtonEState = 0;
-volatile int lastButton0State = 0;
-volatile int lastButton1State = 0;
-volatile int lastButton2State = 0;
+volatile int editMode = false;
 
-volatile int editModeToggleState = 0;
 
-// -------------------- CONSTANTS --------------------
-volatile float* temps[] = {&currentTemperature, &setTemperature};
-volatile float* speed[] = {&currentSpeed, &setSpeed};
+// -------------------- MENU --------------------
+struct MenuItem {
+  const char* name;
+  int fvalueCount;
+  volatile float* fvaluePtr;
+  int actionsCount;
+  void (*onClickAction[])();    // void* func_name is a function returning void* , void (*func_name) points to a function returning void
+};
+struct Menu {
+  const char* title;
+  const int itemCount;
+  MenuItem* items;
+};
+
 MenuItem mainMenuItems[] = {
-  {"Temp", temps, 2, editModeToggle},
-  {"Speed", speed, 2, editModeToggle}
+  {"Temp", 2, temperature, 1, {editmodeToggle}},
+  {"Speed", 2, speed, 1, {editmodeToggle}}
 };
 Menu mainMenu = {
   "Main Menu",
-  mainMenuItems,
-  2         // Menu item count
+  2,                // Menu item count
+  mainMenuItems
 };
 
-Menu *activeMenu = &mainMenu;
+Menu* activeMenu = &mainMenu;
 int activeMenuCursor = 0;
 
-#if !defined(HAS_SCREEN) || !defined(SCREEN_ADDRESS)
-  #error "Screen not defined"
+#if defined(HAS_SCREEN) && !defined(SCREEN_ADDRESS)
+  #error "Screen adress not defined"
 #endif
-LiquidCrystal_I2C lcd(SCREEN_ADDRESS, 16, 2);
+LiquidCrystal_I2C lcd(SCREEN_ADDRESS, SCREEN_WIDTH, SCREEN_HEIGHT);
 
 
-// -------------------- SETUP AND LOOP --------------------
-
+// --------------------------------------------------------------
 void setup() {
   #ifndef HEATER_PIN
     #error "HEATER_PIN not defined"
   #endif
-    pinMode(HEATER_PIN, OUTPUT);
-  
-  #ifdef FAN_PIN
-    pinMode(FAN_PIN, OUTPUT);
-  #endif
-  #ifdef BUTTON_0_PIN
-    pinMode(BUTTON_0_PIN, INPUT_PULLUP);
-  #endif
-  #ifdef BUTTON_1_PIN
-    pinMode(BUTTON_1_PIN, INPUT_PULLUP);
-  #endif
-  #ifdef BUTTON_2_PIN
-    pinMode(BUTTON_2_PIN, INPUT_PULLUP);
-  #endif
+  pinMode(HEATER_PIN, OUTPUT);
 
-  #ifdef MOTOR_STEP_PIN
-    pinMode(MOTOR_STEP_PIN, OUTPUT);
-  #endif
-  #ifdef MOTOR_DIR_PIN
-    pinMode(MOTOR_DIR_PIN, OUTPUT);
-  #endif
+  pinMode(FAN_PIN, OUTPUT);
+  pinMode(BUTTON_0_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_1_PIN, INPUT_PULLUP);
+  pinMode(BUTTON_2_PIN, INPUT_PULLUP);
+
+  pinMode(MOTOR_STEP_PIN, OUTPUT);
+  pinMode(MOTOR_DIR_PIN, OUTPUT);
 
   #ifndef NTC_PIN
     #error "NTC_PIN not defined"
   #endif
-    pinMode(NTC_PIN, INPUT);
+  pinMode(NTC_PIN, INPUT);
 
-  #ifdef HAS_SCREEN
-    lcd.init();
-    lcd.backlight();
-  #endif
+  lcd.init();
+  lcd.backlight();
 
   pinMode(ENCODER_BUTTON_PIN, INPUT_PULLUP);
   pinMode(ENCODER_PIN_A, INPUT_PULLUP);
@@ -118,17 +96,17 @@ void setup() {
   Serial.begin(9600);
 }
 
-unsigned long millis_lastScreenRefresh = 0;
-unsigned long millis_lastUpdate = 0;
-unsigned long millis_lastMotorStep = 0;
+unsigned long lastScreenRefresh_ms = 0;
+unsigned long lastUpdate_ms = 0;
+unsigned long lastMotorStep_ms = 0;
 void loop() {
-  if (softDelay(&millis_lastScreenRefresh, SCREEN_REFRESH_MILLISECONDS)) updateScreen();
+  if (softDelay(&lastScreenRefresh_ms, SCREEN_REFRESH_MILLISECONDS)) updateScreen();
 
-  if (softDelay(&millis_lastUpdate, (int)(1000.0/UPDATE_FREQ))) update();
+  if (softDelay(&lastUpdate_ms, (int)(1000.0/UPDATE_FREQ))) update();
 
-  if (motorOn && softDelay(&millis_lastMotorStep, (int)(1000.0/abs(currentSpeed)))){
+  if (motorOn && softDelay(&lastMotorStep_ms, (int)(1000.0/abs(speed[1])))){
     step = !step;
-    if (currentSpeed >= 0) digitalWrite(MOTOR_DIR_PIN, !INVERT_MOTOR_DIRECTION);
+    if (speed[0] >= 0) digitalWrite(MOTOR_DIR_PIN, !INVERT_MOTOR_DIRECTION);
     else digitalWrite(MOTOR_DIR_PIN, INVERT_MOTOR_DIRECTION);
     digitalWrite(MOTOR_STEP_PIN, step);
   }
@@ -138,49 +116,32 @@ void loop() {
 
 
 // -------------------- FUNCTION DEFINITIONS --------------------
-float tempFromAnalog (int val) {
-  float sensor_resistance = (1023.0*NTC_RESISTOR)/((float)val) - NTC_RESISTOR;
-  float T = log(sensor_resistance/REFERENCE_RESISTANCE);
-  T /= NTC_BETA;
-  T += 1.0 / REFERENCE_TEMP_KELVIN;
-  T = 1.0 / T;
-  return (T - 273.15);
-}
-
-unsigned long millis_lastHeaterOn = 0;
-unsigned long millis_lastHeaterOff = 0;
-void setHeatPower(float percentage) {
-  if (percentage < 0) percentage = 0;
-  if (percentage > 100) percentage = 100;
+void update(){
+  temperature[0] = tempFromAnalog(analogRead(NTC_PIN));
+  float tempError = temperature[0]-temperature[1];
+  float heatPower = -tempError*(100.0/TEMP_ERROR_MAX);
   
-  #ifndef HEATER_SWITCH_FREQ
-    analogWrite(MOSFET_PIN, percentage * 255 / 100);
-  #else
+  if(heaterOn) setHeatPower(heatPower);
+  else setHeatPower(0);
+  float speedError = speed[0] - speed[1];
+  float accelAddition = (float)MOTOR_ACCELERATION*UPDATE_FREQ/1000.0;
+  if(speedError > accelAddition) speed[0] += accelAddition;
+  else speed[0] = speed[1];
 
-  millisOverflowHandler(&millis_lastHeaterOff);
-  int onTime = millis() - millis_lastHeaterOff;
-  int onTimeLimit = (int) (10.0*(float)percentage)/HEATER_SWITCH_FREQ;
-  if (heaterOn && (onTime >= onTimeLimit)) {
-    heaterOn = false;
-    digitalWrite(HEATER_PIN, heaterOn);
-    millis_lastHeaterOn = millis();
-  }
-  millisOverflowHandler(&millis_lastHeaterOn);
-  int offTime = millis() - millis_lastHeaterOn;
-  int offTimeLimit = 1000 - onTimeLimit;
-  if (!heaterOn && (offTime >= offTimeLimit)){
-    heaterOn = true;
-    digitalWrite(HEATER_PIN, heaterOn);
-    millis_lastHeaterOff = millis();
-  }
+  int lastValIndex = activeMenu->items[activeMenuCursor].fvalueCount - 1;
+  if(editMode) activeMenu->items[activeMenuCursor].fvaluePtr[lastValIndex] = activeMenu->items[activeMenuCursor].fvaluePtr[lastValIndex] + encoderSteps;
+  else activeMenuCursor = (activeMenuCursor+encoderSteps)%activeMenu->itemCount;
+  encoderSteps = 0;
 
-  #endif
+  digitalWrite(FAN_PIN, fanOn);
+
+  return;
 }
 
 void updateScreen() {
   lcd.clear();
   lcd.setCursor(0, 0);
-  if (editModeToggleState) lcd.print(">");
+  if (editMode) lcd.print(">");
   else lcd.print("-");
 
   for (int i = 0; i < SCREEN_HEIGHT; i++){
@@ -194,8 +155,8 @@ void updateScreen() {
 
     lcd.print(" ");
     Serial.print(": ");
-    for (int j = 0; j < activeItem->fvaluesCount; j++){
-      float current_value = *activeItem->fvaluesPtr[j];
+    for (int j = 0; j < activeItem->fvalueCount; j++){
+      float current_value = activeItem->fvaluePtr[j];
       if (j>0) {
         lcd.print("/");
         Serial.print (" / ");
@@ -206,10 +167,7 @@ void updateScreen() {
   }
 }
 
-void editModeToggle(){
-  editModeToggleState = !editModeToggleState;
-}
-
+int lastButtonState[4] = {0,0,0,0};
 void inputHandler(){
   int encoderState = digitalRead(ENCODER_PIN_A);
   if (encoderState != lastEncoderState) {
@@ -223,41 +181,84 @@ void inputHandler(){
 
   int buttonEState = digitalRead(ENCODER_BUTTON_PIN);
   if (buttonEState){
-    if(!lastButtonEState){
-      activeMenu->items[activeMenuCursor].onClickAction();
-      lastButtonEState = buttonEState;
+    if(!lastButtonState[0]){
+      activeMenu->items[activeMenuCursor].onClickAction[0]();
+      lastButtonState[0] = buttonEState;
     }
   }
-  else lastButtonEState = buttonEState;
+  else lastButtonState[0] = buttonEState;
 
   int button0State = digitalRead(TOGGLE_HEAT_BUTTON);
   if (button0State){
-    if(!lastButton0State){
+    if(!lastButtonState[1]){
       heaterOn = !heaterOn;
-      lastButton0State = button0State;
+      lastButtonState[1] = button0State;
     }
   }
-  else lastButton0State = button0State;
+  else lastButtonState[1] = button0State;
 
   int button1State = digitalRead(TOGGLE_MOTOR_BUTTON);
   if (button1State){
-    if(!lastButton1State){
+    if(!lastButtonState[2]){
       motorOn = !motorOn;
-      lastButton1State = button1State;
+      lastButtonState[2] = button1State;
     }
   }
-  else lastButton1State = button1State;
+  else lastButtonState[2] = button1State;
 
   int button2State = digitalRead(TOGGLE_FAN_BUTTON);
   if (button2State){
-    if(!lastButton2State){
+    if(!lastButtonState[3]){
       fanOn = !fanOn;
-      lastButton2State = button2State;
+      lastButtonState[3] = button2State;
     }
   }
-  else lastButton2State = button2State;
+  else lastButtonState[3] = button2State;
 
   return;
+}
+
+void editmodeToggle(){
+  editMode = !editMode;
+}
+
+float tempFromAnalog (int val) {
+  float sensor_resistance = (1023.0*NTC_RESISTOR)/((float)val) - NTC_RESISTOR;
+  float T = log(sensor_resistance/REFERENCE_RESISTANCE);
+  T /= NTC_BETA;
+  T += 1.0 / REFERENCE_TEMP_KELVIN;
+  T = 1.0 / T;
+  return (T - 273.15);
+}
+
+unsigned long lastHeaterOn_ms = 0;
+unsigned long lastHeaterOff_ms = 0;
+void setHeatPower(float percentage) {
+  if (percentage < 0) percentage = 0;
+  if (percentage > 100) percentage = 100;
+  
+  #ifndef HEATER_SWITCH_FREQ
+    analogWrite(MOSFET_PIN, percentage * 255 / 100);
+  #else
+
+  millisOverflowHandler(&lastHeaterOff_ms);
+  int onTime = millis() - lastHeaterOff_ms;
+  int onTimeLimit = (int) (10.0*(float)percentage)/HEATER_SWITCH_FREQ;
+  if (heaterOn && (onTime >= onTimeLimit)) {
+    heaterOn = false;
+    digitalWrite(HEATER_PIN, heaterOn);
+    lastHeaterOn_ms = millis();
+  }
+  millisOverflowHandler(&lastHeaterOn_ms);
+  int offTime = millis() - lastHeaterOn_ms;
+  int offTimeLimit = 1000 - onTimeLimit;
+  if (!heaterOn && (offTime >= offTimeLimit)){
+    heaterOn = true;
+    digitalWrite(HEATER_PIN, heaterOn);
+    lastHeaterOff_ms = millis();
+  }
+
+  #endif
 }
 
 void millisOverflowHandler(unsigned long* millis_ptr){
@@ -265,27 +266,6 @@ void millisOverflowHandler(unsigned long* millis_ptr){
   return;
 }
 
-void update(){
-  currentTemperature = tempFromAnalog(analogRead(NTC_PIN));
-  float tempError = currentTemperature-setTemperature;
-  float heatPower = -tempError*(100.0/TEMP_ERROR_MAX);
-  
-  if(heaterOn) setHeatPower(heatPower);
-  else setHeatPower(0);
-  float speedError = currentSpeed - setSpeed;
-  float accelAddition = (float)MOTOR_ACCELERATION*UPDATE_FREQ/1000.0;
-  if(speedError > accelAddition) currentSpeed += accelAddition;
-  else currentSpeed = setSpeed;
-
-  int lastValIndex = activeMenu->items[activeMenuCursor].fvaluesCount - 1;
-  if(editModeToggleState) activeMenu->items[activeMenuCursor].fvaluesPtr[lastValIndex] = activeMenu->items[activeMenuCursor].fvaluesPtr[lastValIndex] + encoderSteps;
-  else activeMenuCursor = (activeMenuCursor+encoderSteps)%activeMenu->itemCount;
-  encoderSteps = 0;
-
-  digitalWrite(FAN_PIN, fanOn);
-
-  return;
-}
 
 bool softDelay(unsigned long* lastMillis_ptr, unsigned int delay_milliseconds){
   millisOverflowHandler(lastMillis_ptr);
@@ -295,3 +275,4 @@ bool softDelay(unsigned long* lastMillis_ptr, unsigned int delay_milliseconds){
   } 
   return false;
 }
+
