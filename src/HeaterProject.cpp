@@ -32,6 +32,7 @@ volatile int encoderSteps = 0;
 
 volatile int editMode = false;
 
+char* screenData = nullptr;
 
 // -------------------- MENU --------------------
 struct MenuItem {
@@ -94,13 +95,19 @@ void setup() {
   pinMode(ENCODER_PIN_B, INPUT_PULLUP);
 
   Serial.begin(9600);
+
+  Serial.println("Trying malloc for screenData");
+  while(screenData == nullptr) screenData = (char*) malloc(sizeof(char)*SCREEN_WIDTH*SCREEN_HEIGHT);
+  Serial.println("ScreenData memory allocated");
 }
 
 unsigned long lastScreenRefresh_ms = 0;
 unsigned long lastUpdate_ms = 0;
 unsigned long lastMotorStep_ms = 0;
 void loop() {
+  #ifdef HAS_SCREEN
   if (softDelay(&lastScreenRefresh_ms, SCREEN_REFRESH_MILLISECONDS)) updateScreen();
+  #endif
 
   if (softDelay(&lastUpdate_ms, (int)(1000.0/UPDATE_FREQ))) update();
 

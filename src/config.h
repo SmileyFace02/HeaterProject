@@ -24,7 +24,7 @@
 #define SCREEN_ADDRESS 0x27         //I2C address
 #define SCREEN_WIDTH  16
 #define SCREEN_HEIGHT 2
-#define SCREEN_REFRESH_MILLISECONDS 100
+#define SCREEN_REFRESH_MILLISECONDS 25
 
 #define ENCODER_PIN_A 5
 #define ENCODER_PIN_B 6
@@ -35,7 +35,7 @@
 #define NTC_RESISTOR 100000.0       //100k resistor
 #define NTC_BETA 3950.0             //3950 beta
 
-#define UPDATE_FREQ 10              //(Hz) check and recalculate everything at this frequency
+#define UPDATE_FREQ 4               //(Hz) check and recalculate everything at this frequency
 #define TEMP_ERROR_MAX 10           //(C) sets at which point the power starts going down when nearing the target 
 
 
